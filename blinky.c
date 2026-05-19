@@ -36,6 +36,7 @@
 #include "utils/uartstdio.h"
 #include "driverlib/rom.h"
 #include "driverlib/rom_map.h"
+#include "driverlib/pwm.h"
 
 #ifdef DEBUG
 void
@@ -50,6 +51,123 @@ __error__(char *pcFilename, uint32_t ui32Line)
 #define TURN_LEFT  GPIO_PIN_7
 #define TURN_RIGHT_A GPIO_PIN_6
 #define TURN_LEFT_A GPIO_PIN_4
+
+//*****************************************************************************
+// Global variables
+//*****************************************************************************
+//*****************************************************************************
+uint32_t g_ui32SysClock = 0;
+uint32_t g_ui32PWMFrequency = 0;
+uint32_t g_ui32PWMDutyCycle = 0;
+
+
+//*****************************************************************************
+// Function: SetPWM
+//
+// Configures PWM0 on PB6 (M0PWM0)
+// sets frequency and duty cycle 
+//*****************************************************************************
+void SetPWM(uint32_t ui32Frequency, uint32_t ui32DutyCycle){
+    uint32_t ui32Period;
+    uint32_t ui32PulseWidth;
+
+    //
+    // Protect against invalid values
+    //
+    if(ui32Frequency == 0)
+    {
+        ui32Frequency = 1;
+    }
+
+    if(ui32DutyCycle > 100)
+    {
+        ui32DutyCycle = 100;
+    }
+
+    //
+    // Calculate PWM period
+    // Divide by 64, since the PWM gen uses a 64 div for sysclk
+    ui32Period = (g_ui32SysClock/64) / ui32Frequency;
+
+    //
+    // Calculate pulse width
+    //
+    ui32PulseWidth = (ui32Period * ui32DutyCycle) / 100;
+
+    //
+    // Apply PWM settings
+    //
+    PWMGenPeriodSet(PWM0_BASE,
+                    PWM_GEN_0,
+                    ui32Period);
+
+    PWMPulseWidthSet(PWM0_BASE,
+                     PWM_OUT_0,
+                     ui32PulseWidth);
+
+    //
+    // Save values
+    //
+    g_ui32PWMFrequency = ui32Frequency;
+    g_ui32PWMDutyCycle = ui32DutyCycle;
+}
+//*****************************************************************************
+// Function: ConfigurePWM
+//
+// Configures PWM0 on PB6 (M0PWM0)
+// Initial: 1 kHz frequency, 50% duty cycle
+//*****************************************************************************
+void ConfigurePWM(void){
+    //
+    // PWM clock = system clock / 64 for greater precision 
+    //
+    MAP_SysCtlPWMClockSet(SYSCTL_PWMDIV_64);
+
+    //
+    // Enable peripherals
+    //
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM0));
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB));
+
+    //
+    // PB6 -> M0PWM0
+    //
+    GPIOPinConfigure(GPIO_PB6_M0PWM0);
+    GPIOPinTypePWM(GPIO_PORTB_BASE, GPIO_PIN_6);
+
+    //
+    // Configure PWM generator
+    //
+    PWMGenConfigure(PWM0_BASE,
+                    PWM_GEN_0,
+                    PWM_GEN_MODE_DOWN);
+
+    //
+    // Initial PWM configuration
+    //
+    SetPWM(250, 25);
+
+    //
+    // Enable PWM output
+    //
+    PWMOutputState(PWM0_BASE,
+                   PWM_OUT_0_BIT,
+                   true);
+
+    //
+    // Start PWM generator
+    //
+    PWMGenEnable(PWM0_BASE,
+                 PWM_GEN_0);
+}
+//*****************************************************************************
+// Function: Configure_OUTPUT_PINS
+//
+// Configs output pins for high or low value 
+//*****************************************************************************
 //*****************************************************************************
 // Function: Configure_OUTPUT_PINS
 //
@@ -369,7 +487,6 @@ void ConfigureUART(void){
     UARTClockSourceSet( UART0_BASE, UART_CLOCK_PIOSC);
     UARTStdioConfig(0,115200,16000000);
 }
-
 // ARDUINO LOGIC...
 int32_t MapValue(int32_t x,int32_t in_min, int32_t in_max, int32_t out_min, int32_t out_max){
     int32_t result;
@@ -440,23 +557,36 @@ void channel4(uint16_t value){
     }
 }
 void channel14(uint16_t value){
-    int angle;
+    int32_t angle;
+    int32_t pulseWidthUs;
+    int32_t dutyCycle;
     if(value >= 272 && value <= 1712)
     {
-       angle = MapValue(value,272,1712,0,180);
-       //TO BE DECIDED. USE PCA9685 DRIVE OR INTERNAL MCU PWM 
+        // Convert SBUS -> angle
+        angle = MapValue(value,272,1712,0,180);
+        // Convert Angle -> pulse width
+        // Around 1000us to 2000us
+        pulseWidthUs = MapValue(angle,0,180,1000,2000);
+        //Convert pulse width -> duty cycle
+        dutyCycle = (pulseWidthUs * 100) / 20000;
+        //Apply PWM
+
+        SetPWM(50,dutyCycle);
+        UARTprintf("Angle: %d Duty: %d%% \n", angle,dutyCycle);
+       
     }
 }
 int main(void) 
 {
-  
+    //CLOCK CONFIG
     SysCtlClockSet(SYSCTL_OSC_MAIN | SYSCTL_USE_OSC | SYSCTL_XTAL_16MHZ);
-    Configure_OUTPUT_PINS();
-
+    g_ui32SysClock = SysCtlClockGet();
+    ConfigurePWM();
     ConfigureUART();
     I2C0_Init();
     PCA9685_Init();
     PCA9685_SetPWMFreq(50);
+    Configure_OUTPUT_PINS();
     UARTprintf("OUTPUT PINS... \n");
 
     while(1)
@@ -493,7 +623,7 @@ int main(void)
 
 //    SysCtlDelay(g_ui32SysClock / 3);
 *///////////////////////////////////////////////////////
-
+    channel14(1712);
     MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3,GPIO_PIN_3 ); // HIGH LED
     //PCA9685_SetPWM(1,0,2048);  
     }
