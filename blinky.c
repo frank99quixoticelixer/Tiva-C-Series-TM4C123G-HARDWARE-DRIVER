@@ -318,7 +318,7 @@ void PCA9685_Write(uint8_t reg, uint8_t data){
         //
         // Transmission successful
         //
-        UARTprintf("WRITE OK\n");
+        //UARTprintf("WRITE OK\n");
     }
     else
     {
@@ -327,7 +327,7 @@ void PCA9685_Write(uint8_t reg, uint8_t data){
         //
         // Prints numeric error code
         //
-        UARTprintf("I2C ERROR: %u\n", status);
+        //UARTprintf("I2C ERROR: %u\n", status);
     }
 }
 //*****************************************************************************
@@ -487,6 +487,74 @@ void ConfigureUART(void){
     UARTClockSourceSet( UART0_BASE, UART_CLOCK_PIOSC);
     UARTStdioConfig(0,115200,16000000);
 }
+//*****************************************************************************
+//
+// Function: ConfigureSBUSUART
+//
+// Description:
+// Configures UART1 for SBUS communication on the TM4C123G.
+//
+// - Baud rate: 100000
+// - Data bits: 8
+// - Parity: Even
+// - Stop bits: 2
+//
+// UART1 is mapped to:
+//
+// PB0 -> U1RX  (SBUS input)
+// PB1 -> U1TX  (optional transmit)
+//
+// Note:
+// Standard SBUS signals are inverted.
+// An external inverter circuit or inverter-capable UART hardware
+// may be required depending on the receiver used.
+//
+//*****************************************************************************
+void ConfigureSBUSUART(void){
+    //
+    // Enable peripherals
+    // UART1 and GPIO Port B
+    //
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART1);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+
+    //
+    // Wait until peripherals are ready
+    //
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_UART1));
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB));
+
+    //
+    // Configure UART pins
+    //
+    // PB0 -> U1RX
+    // PB1 -> U1TX
+    //
+    GPIOPinConfigure(GPIO_PB0_U1RX);
+    GPIOPinConfigure(GPIO_PB1_U1TX);
+
+    GPIOPinTypeUART(
+        GPIO_PORTB_BASE,
+        GPIO_PIN_0 | GPIO_PIN_1
+    );
+
+    //
+    // Configure UART1 for SBUS:
+    //
+    // Baud Rate : 100000
+    // Data Bits : 8
+    // Parity    : Even
+    // Stop Bits : 2
+    //
+    UARTConfigSetExpClk(
+        UART1_BASE,
+        SysCtlClockGet(),
+        100000,
+        UART_CONFIG_WLEN_8 |
+        UART_CONFIG_STOP_TWO |
+        UART_CONFIG_PAR_EVEN
+    );
+}
 // ARDUINO LOGIC...
 int32_t MapValue(int32_t x,int32_t in_min, int32_t in_max, int32_t out_min, int32_t out_max){
     int32_t result;
@@ -583,11 +651,13 @@ int main(void)
     g_ui32SysClock = SysCtlClockGet();
     ConfigurePWM();
     ConfigureUART();
+    ConfigureSBUSUART();
     I2C0_Init();
     PCA9685_Init();
     PCA9685_SetPWMFreq(50);
     Configure_OUTPUT_PINS();
     UARTprintf("OUTPUT PINS... \n");
+    uint8_t cData;
 
     while(1)
     {
@@ -600,6 +670,7 @@ int main(void)
     UARTprintf("\nTEST: 992\n");
     channel10(992);
     channel4(992);
+    channel14(992);
  
  // PASS
     //
@@ -610,6 +681,7 @@ int main(void)
 
     channel10(1712);
     channel4(1712);
+    channel14(1712);
  //   SysCtlDelay(g_ui32SysClock / 3);
 //PASS
     //
@@ -620,10 +692,35 @@ int main(void)
 
     channel10(272);
     channel4(272);
+    channel14(272);
 
 //    SysCtlDelay(g_ui32SysClock / 3);
 *///////////////////////////////////////////////////////
-    channel14(1712);
+//
+    // Check if UART1 received data
+    //
+    if(UARTCharsAvail(UART1_BASE))
+    {
+        //
+        // Read byte from UART1
+        //
+
+        cData = UARTCharGet(UART1_BASE);
+
+        //
+        // Print HEX byte
+        //
+        UARTprintf("0x%02X ", cData);
+
+        //
+        // Detect SBUS frame header
+        //
+        if(cData == 0x0F)
+        {
+            UARTprintf("\nFRAME START\n");
+        }
+    }
+
     MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3,GPIO_PIN_3 ); // HIGH LED
     //PCA9685_SetPWM(1,0,2048);  
     }
