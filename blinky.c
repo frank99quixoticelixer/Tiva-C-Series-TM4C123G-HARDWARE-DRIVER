@@ -21,10 +21,12 @@
 // This is part of revision 2.2.0.295 of the EK-TM4C123GXL Firmware Package.
 //
 //*****************************************************************************
+#include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include "inc/hw_memmap.h"
+#include "inc/hw_gpio.h"
 #include "driverlib/debug.h"
 #include "driverlib/gpio.h"
 #include "driverlib/sysctl.h"
@@ -34,6 +36,7 @@
 #include "utils/uartstdio.h"
 #include "driverlib/rom.h"
 #include "driverlib/rom_map.h"
+
 #ifdef DEBUG
 void
 __error__(char *pcFilename, uint32_t ui32Line)
@@ -41,7 +44,34 @@ __error__(char *pcFilename, uint32_t ui32Line)
     while(1);
 }
 #endif
-//*********************************************************
+
+
+#define TURN_RIGHT  GPIO_PIN_6
+#define TURN_LEFT  GPIO_PIN_7
+#define TURN_RIGHT_A GPIO_PIN_6
+#define TURN_LEFT_A GPIO_PIN_4
+//*****************************************************************************
+// Function: Configure_OUTPUT_PINS
+//
+// Configs output pins for high or low value 
+//*****************************************************************************
+void Configure_OUTPUT_PINS(void){
+    //
+    // Enable the GPIO port for C, GPIO D, F 
+    //
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    //
+    // Enable the GPIO pins (PC6,PC7,PD6, PF4) as an output.
+    //
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTC_BASE, TURN_RIGHT); //PC6 TURN_RIGHT
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTC_BASE, TURN_LEFT); //PC7 TURN_LEFT
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTD_BASE, TURN_RIGHT_A); //PD6 TURN_RIGHT_A
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, TURN_LEFT_A); //PF4 TURN_LEFT_A
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3); //LED
+}
+//*****************************************************************************
 // Function: I2C0_Init
 // Description: Initializes I2C0 module on TM4C123G for Master mode
 //*********************************************************
@@ -67,14 +97,6 @@ void I2C0_Init(void){
 
     // Clear any previous I2C status
     I2CMasterIntClear(I2C0_BASE);
-}
-void PCA9685_Init(void){
-    //
-    // MODE1 register = normal mode
-    //
-    PCA9685_Write(0x00, 0x00);
-
-    SysCtlDelay(SysCtlClockGet() / 100);
 }
 //*****************************************************************************
 //
@@ -190,7 +212,27 @@ void PCA9685_Write(uint8_t reg, uint8_t data){
         UARTprintf("I2C ERROR: %u\n", status);
     }
 }
+//*****************************************************************************
+//
+// Function: PCA9685_Init
+//
+// Description:
+// Initializes the PCA9685 PWM controller.
+//
+// This function places the PCA9685 into normal operating mode
+// by configuring the MODE1 register.
+//
+// After initialization, the internal oscillator starts running
+// and PWM generation becomes available.
+//*****************************************************************************
+void PCA9685_Init(void){
+    //
+    // MODE1 register = normal mode
+    //
+    PCA9685_Write(0x00, 0x00);
 
+    SysCtlDelay(SysCtlClockGet() / 100);
+}
 //*****************************************************************************
 //
 // Function: PCA9685_SetPWM
@@ -328,17 +370,131 @@ void ConfigureUART(void){
     UARTStdioConfig(0,115200,16000000);
 }
 
+// ARDUINO LOGIC...
+int32_t MapValue(int32_t x,int32_t in_min, int32_t in_max, int32_t out_min, int32_t out_max){
+    int32_t result;
+    result = (x - in_min) *
+           (out_max - out_min) /
+           (in_max - in_min) +
+           out_min;
+    return result;
+}
+void channel10(uint16_t value){
+    if(value == 992) 
+    {    
+        MAP_GPIOPinWrite(GPIO_PORTC_BASE, TURN_LEFT,0x00); // LOW PC7
+        
+        MAP_GPIOPinWrite(GPIO_PORTC_BASE, TURN_RIGHT,0x00); // LOW PC6 
+    }
+    else if( value == 1712)
+    {
+        MAP_GPIOPinWrite(GPIO_PORTC_BASE, TURN_LEFT,0x00); // LOW PC7 
+
+        MAP_GPIOPinWrite(GPIO_PORTC_BASE, TURN_RIGHT,TURN_RIGHT); // HIGH PC6
+    }
+    else if( value == 272)
+    {
+        MAP_GPIOPinWrite(GPIO_PORTC_BASE, TURN_LEFT,TURN_LEFT); // HIGH PC7 
+
+        MAP_GPIOPinWrite(GPIO_PORTC_BASE, TURN_RIGHT,0x00); // LOW PC6       
+    }    
+    else
+    {
+        MAP_GPIOPinWrite(GPIO_PORTC_BASE, TURN_LEFT,0x00); // LOW PC7 
+
+        MAP_GPIOPinWrite(GPIO_PORTC_BASE, TURN_RIGHT,0x00); // LOW PC6
+    }
+}
+void channel4(uint16_t value){
+    if(value == 992)
+    {
+        PCA9685_SetPWM(1,0,2048); //duty cycle 50%
+
+        MAP_GPIOPinWrite(GPIO_PORTF_BASE, TURN_LEFT_A,0x00); // LOW PF4
+
+        MAP_GPIOPinWrite(GPIO_PORTD_BASE, TURN_RIGHT_A,TURN_RIGHT_A); // HIGH PD6
+    }
+    else if (value == 1712)
+    {
+        PCA9685_SetPWM(1,0,4095); // duty cycle 100%
+
+        MAP_GPIOPinWrite(GPIO_PORTF_BASE, TURN_LEFT_A,0x00); // LOW PF4
+
+        MAP_GPIOPinWrite(GPIO_PORTD_BASE, TURN_RIGHT_A,TURN_RIGHT_A); // HIGH PD6
+
+    }
+    else if (value == 272)
+    {
+        PCA9685_SetPWM(1,0,0); // duty cycle 0%
+
+        MAP_GPIOPinWrite(GPIO_PORTF_BASE, TURN_LEFT_A,0x00); // LOW PF4
+
+        MAP_GPIOPinWrite(GPIO_PORTD_BASE, TURN_RIGHT_A,0x00); // LOW PD6
+    }
+    else 
+    {
+        PCA9685_SetPWM(1,0,0); // duty cycle 0%
+        MAP_GPIOPinWrite(GPIO_PORTF_BASE, TURN_LEFT_A,0x00); // LOW PF4
+
+        MAP_GPIOPinWrite(GPIO_PORTD_BASE, TURN_RIGHT_A,0x00); // LOW PD6
+    }
+}
+void channel14(uint16_t value){
+    int angle;
+    if(value >= 272 && value <= 1712)
+    {
+       angle = MapValue(value,272,1712,0,180);
+       //TO BE DECIDED. USE PCA9685 DRIVE OR INTERNAL MCU PWM 
+    }
+}
 int main(void) 
 {
   
     SysCtlClockSet(SYSCTL_OSC_MAIN | SYSCTL_USE_OSC | SYSCTL_XTAL_16MHZ);
+    Configure_OUTPUT_PINS();
+
     ConfigureUART();
     I2C0_Init();
     PCA9685_Init();
-    PCA9685_SetPWMFreq(200);
+    PCA9685_SetPWMFreq(50);
+    UARTprintf("OUTPUT PINS... \n");
 
     while(1)
     {
-        PCA9685_SetPWM(1,0,2048);  
+/*///////////////////////////////////////////////////////
+//  PASS        
+    //
+    // TEST 1
+    // Neutral position
+    //
+    UARTprintf("\nTEST: 992\n");
+    channel10(992);
+    channel4(992);
+ 
+ // PASS
+    //
+    // TEST 2
+    // Right position
+    //
+    UARTprintf("\nTEST: 1712\n");
+
+    channel10(1712);
+    channel4(1712);
+ //   SysCtlDelay(g_ui32SysClock / 3);
+//PASS
+    //
+    // TEST 3
+    // Left position
+    //
+    UARTprintf("\nTEST: 272\n");
+
+    channel10(272);
+    channel4(272);
+
+//    SysCtlDelay(g_ui32SysClock / 3);
+*///////////////////////////////////////////////////////
+
+    MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3,GPIO_PIN_3 ); // HIGH LED
+    //PCA9685_SetPWM(1,0,2048);  
     }
 }
