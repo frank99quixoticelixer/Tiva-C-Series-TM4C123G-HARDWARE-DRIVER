@@ -1,0 +1,24 @@
+# CCS build folders
+Debug/
+Release/
+
+# CCS settings
+.settings/
+
+# Build artifacts
+*.out
+*.obj
+*.d
+*.map
+*.xml
+
+# Logs
+*.log
+
+# Temporary files
+*.bak
+*.tmp
+
+# OS files
+Thumbs.db
+.DS_Store
