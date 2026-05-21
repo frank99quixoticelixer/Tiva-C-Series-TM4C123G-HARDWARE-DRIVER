@@ -405,7 +405,7 @@ void PCA9685_SetPWM(uint8_t channel, uint16_t on, uint16_t off){
     //
     // ON high byte
     //
-    PCA9685_Write(reg + 1, on >> 8);
+    PCA9685_Write(reg + 1, on >> 8); // shift 8 bits 
 
     //
     // OFF low byte
@@ -415,7 +415,7 @@ void PCA9685_SetPWM(uint8_t channel, uint16_t on, uint16_t off){
     //
     // OFF high byte
     //
-    PCA9685_Write(reg + 3, off >> 8);
+    PCA9685_Write(reg + 3, off >> 8); // shift 8 bits
 }
 //*****************************************************************************
 //
@@ -699,7 +699,17 @@ int main(void)
 //
     // Check if UART1 received data
     //
-    if(UARTCharsAvail(UART1_BASE))
+  UARTCharPut(UART1_BASE, 0x55);
+
+
+if(UARTCharsAvail(UART1_BASE))
+{
+    cData = UARTCharGet(UART1_BASE);
+    UARTprintf("0x%02X\n", cData);
+    //SysCtlDelay(g_ui32SysClock / 3);
+}
+/*
+  if(UARTCharsAvail(UART1_BASE))
     {
         //
         // Read byte from UART1
@@ -720,7 +730,9 @@ int main(void)
             UARTprintf("\nFRAME START\n");
         }
     }
-
+    
+    //channel4(992);
+*/
     MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3,GPIO_PIN_3 ); // HIGH LED
     //PCA9685_SetPWM(1,0,2048);  
     }
