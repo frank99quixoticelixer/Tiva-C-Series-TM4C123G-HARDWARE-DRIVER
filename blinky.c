@@ -60,7 +60,8 @@ uint32_t g_ui32SysClock = 0;
 uint32_t g_ui32PWMFrequency = 0;
 uint32_t g_ui32PWMDutyCycle = 0;
 
-
+uint8_t sbusFrame[25];
+uint8_t sbusIndex = 0;
 //*****************************************************************************
 // Function: SetPWM
 //
@@ -148,7 +149,7 @@ void ConfigurePWM(void){
     //
     // Initial PWM configuration
     //
-    SetPWM(250, 25);
+    // SetPWM(250, 25); 
 
     //
     // Enable PWM output
@@ -390,6 +391,9 @@ void PCA9685_Init(void){
 //
 //*****************************************************************************
 void PCA9685_SetPWM(uint8_t channel, uint16_t on, uint16_t off){
+    // @50Hz 310 -> Center 
+    // @50Hz 410 -> 0°
+    // @50Hz 205 -> 90°
     uint8_t reg;
 
     //
@@ -551,9 +555,50 @@ void ConfigureSBUSUART(void){
         SysCtlClockGet(),
         100000,
         UART_CONFIG_WLEN_8 |
-        UART_CONFIG_STOP_TWO |
+        UART_CONFIG_STOP_TWO|
         UART_CONFIG_PAR_EVEN
     );
+}
+void SBUSFRAMES(void)
+{
+    uint8_t cData;
+
+    while(UARTCharsAvail(UART1_BASE))
+    {
+        cData = UARTCharGet(UART1_BASE);
+
+        if(sbusIndex == 0)
+        {
+            if(cData == 0x0F)
+            {
+                sbusFrame[sbusIndex++] = cData;
+            }
+        }
+        else
+        {
+            sbusFrame[sbusIndex++] = cData;
+
+            if(sbusIndex == 25)
+            {
+                UARTprintf("\nFRAME RECEIVED\n");
+
+                int i;
+
+                for(i = 0; i < 25; i++)
+                {
+                    UARTprintf("0x%02X ", sbusFrame[i]);
+                }
+
+                UARTprintf("\n");
+
+                sbusIndex = 0;
+            }
+        }
+    }
+}
+void DelayMs(uint32_t ms)
+{
+    SysCtlDelay((g_ui32SysClock / 3 / 1000) * ms);
 }
 // ARDUINO LOGIC...
 int32_t MapValue(int32_t x,int32_t in_min, int32_t in_max, int32_t out_min, int32_t out_max){
@@ -640,7 +685,7 @@ void channel14(uint16_t value){
         //Apply PWM
 
         SetPWM(50,dutyCycle);
-        UARTprintf("Angle: %d Duty: %d%% \n", angle,dutyCycle);
+        //UARTprintf("Angle: %d Duty: %d%% \n", angle,dutyCycle);
        
     }
 }
@@ -657,10 +702,41 @@ int main(void)
     PCA9685_SetPWMFreq(50);
     Configure_OUTPUT_PINS();
     UARTprintf("OUTPUT PINS... \n");
+    UARTprintf("IDK \n");
     uint8_t cData;
-
+    uint8_t i;
+    //SetPWM(50,25);
     while(1)
     {
+     //SBUSFRAMES();
+
+    // BIT by BIT
+    // If a byte arrived from receiver
+ /**/   
+    if(UARTCharsAvail(UART1_BASE))
+    {
+        //
+        // Read ONE byte
+        //
+        cData = UARTCharGet(UART1_BASE);
+
+        //
+        // Print in HEX
+        //
+        UARTprintf("0x%02X \n", cData);
+    }
+
+    /*
+    PCA9685_SetPWM(1,0, 205);
+    DelayMs(1000);
+         PCA9685_SetPWM(1,0, 310);
+    DelayMs(1000);
+              PCA9685_SetPWM(1,0, 410);
+    DelayMs(1000);
+         PCA9685_SetPWM(1,0, 310);
+    DelayMs(1000);
+    */
+
 /*///////////////////////////////////////////////////////
 //  PASS        
     //
@@ -699,15 +775,45 @@ int main(void)
 //
     // Check if UART1 received data
     //
-  UARTCharPut(UART1_BASE, 0x55);
+ // UARTCharPut(UART1_BASE, 0x55);
+/*
 
+for(i = 0; i < 25; i++)
+{
+    //
+    // Send ONE byte
+    //
+    UARTCharPut(UART1_BASE, sbusFrame[i]);
 
+    //
+    // Wait until received
+    //
+    while(!UARTCharsAvail(UART1_BASE));
+
+    //
+    // Read byte
+    //
+    cData = UARTCharGet(UART1_BASE);
+
+    //
+    // Print byte
+    //
+    UARTprintf("0x%02X ", cData);
+
+}
+
+UARTprintf("\n");
+SysCtlDelay(SysCtlClockGet()/3000); // ~1ms
+/*
 if(UARTCharsAvail(UART1_BASE))
 {
     cData = UARTCharGet(UART1_BASE);
     UARTprintf("0x%02X\n", cData);
-    //SysCtlDelay(g_ui32SysClock / 3);
+
+    SysCtlDelay(g_ui32SysClock / 30);
 }
+*/
+
 /*
   if(UARTCharsAvail(UART1_BASE))
     {
@@ -730,10 +836,11 @@ if(UARTCharsAvail(UART1_BASE))
             UARTprintf("\nFRAME START\n");
         }
     }
-    
+  */  
     //channel4(992);
-*/
-    MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3,GPIO_PIN_3 ); // HIGH LED
+   // channel14(992);
+    
+     MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3,GPIO_PIN_3 ); // HIGH LED
     //PCA9685_SetPWM(1,0,2048);  
     }
 }
