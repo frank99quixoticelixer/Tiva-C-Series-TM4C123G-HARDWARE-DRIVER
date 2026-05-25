@@ -59,7 +59,8 @@ __error__(char *pcFilename, uint32_t ui32Line)
 uint32_t g_ui32SysClock = 0;
 uint32_t g_ui32PWMFrequency = 0;
 uint32_t g_ui32PWMDutyCycle = 0;
-
+// SBUS GLOBAL VARIABLES ******************************************************
+uint16_t channels[16]; 
 uint8_t sbusFrame[25];
 uint8_t sbusIndex = 0;
 //*****************************************************************************
@@ -559,14 +560,54 @@ void ConfigureSBUSUART(void){
         UART_CONFIG_PAR_EVEN
     );
 }
+void DecodeSBUS(void)
+{
+    channels[0]  = ((sbusFrame[1]      | sbusFrame[2]  << 8) & 0x07FF);
+    channels[1]  = ((sbusFrame[2] >> 3 | sbusFrame[3]  << 5) & 0x07FF);
+    channels[2]  = ((sbusFrame[3] >> 6 | sbusFrame[4]  << 2 |
+                    sbusFrame[5] << 10) & 0x07FF);
+
+    channels[3]  = ((sbusFrame[5] >> 1 | sbusFrame[6]  << 7) & 0x07FF);
+
+    channels[4]  = ((sbusFrame[6] >> 4 | sbusFrame[7]  << 4) & 0x07FF);
+
+    channels[5]  = ((sbusFrame[7] >> 7 | sbusFrame[8]  << 1 |
+                    sbusFrame[9] << 9) & 0x07FF);
+
+    channels[6]  = ((sbusFrame[9] >> 2 | sbusFrame[10] << 6) & 0x07FF);
+
+    channels[7]  = ((sbusFrame[10] >> 5 | sbusFrame[11] << 3) & 0x07FF);
+
+    channels[8]  = ((sbusFrame[12]     | sbusFrame[13] << 8) & 0x07FF);
+
+    channels[9]  = ((sbusFrame[13] >> 3 | sbusFrame[14] << 5) & 0x07FF);
+
+    channels[10] = ((sbusFrame[14] >> 6 | sbusFrame[15] << 2 |
+                    sbusFrame[16] << 10) & 0x07FF);
+
+    channels[11] = ((sbusFrame[16] >> 1 | sbusFrame[17] << 7) & 0x07FF);
+
+    channels[12] = ((sbusFrame[17] >> 4 | sbusFrame[18] << 4) & 0x07FF);
+
+    channels[13] = ((sbusFrame[18] >> 7 | sbusFrame[19] << 1 |
+                    sbusFrame[20] << 9) & 0x07FF);
+
+    channels[14] = ((sbusFrame[20] >> 2 | sbusFrame[21] << 6) & 0x07FF);
+
+    channels[15] = ((sbusFrame[21] >> 5 | sbusFrame[22] << 3) & 0x07FF);
+}
 void SBUSFRAMES(void)
 {
     uint8_t cData;
+    int i;
 
     while(UARTCharsAvail(UART1_BASE))
     {
         cData = UARTCharGet(UART1_BASE);
 
+        //
+        // WAIT FOR START BYTE
+        //
         if(sbusIndex == 0)
         {
             if(cData == 0x0F)
@@ -576,21 +617,82 @@ void SBUSFRAMES(void)
         }
         else
         {
+            //
+            // RESYNC:
+            // New frame start appeared too early
+            //
+            if(cData == 0x0F && sbusIndex < 24)
+            {
+                sbusIndex = 0;
+                sbusFrame[sbusIndex++] = cData;
+                continue;
+            }
+
+            //
+            // STORE BYTE
+            //
             sbusFrame[sbusIndex++] = cData;
 
+            //
+            // FRAME COMPLETE
+            //
             if(sbusIndex == 25)
             {
-                UARTprintf("\nFRAME RECEIVED\n");
-
-                int i;
-
-                for(i = 0; i < 25; i++)
+                //
+                // VALIDATE FRAME
+                //
+                if(sbusFrame[0] == 0x0F &&
+                  (sbusFrame[24] == 0x00 ||
+                   sbusFrame[24] == 0x04 ||
+                   sbusFrame[24] == 0x14 ||
+                   sbusFrame[24] == 0x24))
                 {
-                    UARTprintf("0x%02X ", sbusFrame[i]);
+                    //UARTprintf("\nVALID FRAME\n");
+                    /*PRINT EACH BIT FROM THE FRAME*/
+                   /* for(i = 0; i < 25; i++)
+                    {
+                        UARTprintf("0x%02X ", sbusFrame[i]);
+                    } */
+
+                    UARTprintf("\n");
+
+                    //
+                    // DECODE HERE
+                        //
+    // DECODE CHANNELS
+    //
+    DecodeSBUS();
+
+
+    //
+    // PRINT CHANNELS
+    //
+    /*
+    UARTprintf("CH10: %4d  ", channels[9]);
+    UARTprintf("CH4: %4d  ", channels[4]);
+    UARTprintf("CH14: %4d  ", channels[13]);
+    */
+    UARTprintf("CH08: %4d  ", channels[7]); //switch SE
+    UARTprintf("CH09: %4d  ", channels[8]); //switch SE
+    UARTprintf("CH014: %4d  ", channels[13]); // KNOB LD1
+    UARTprintf("CH05: %4d  ", channels[4]);     // KNOB RD1
+    // CONTROL FUNCTIONS
+    //
+    /*
+    channel10(channels[9]);   // CH10
+    channel4(channels[3]);    // CH4
+    channel14(channels[13]);  // CH14
+    */
+                    //
+                }
+                else
+                {
+                    UARTprintf("\nINVALID FRAME\n");
                 }
 
-                UARTprintf("\n");
-
+                //
+                // RESET PARSER
+                //
                 sbusIndex = 0;
             }
         }
@@ -697,9 +799,9 @@ int main(void)
     ConfigurePWM();
     ConfigureUART();
     ConfigureSBUSUART();
-    I2C0_Init();
-    PCA9685_Init();
-    PCA9685_SetPWMFreq(50);
+    //I2C0_Init();
+    //PCA9685_Init();
+    //PCA9685_SetPWMFreq(50);
     Configure_OUTPUT_PINS();
     UARTprintf("OUTPUT PINS... \n");
     UARTprintf("IDK \n");
@@ -708,11 +810,12 @@ int main(void)
     //SetPWM(50,25);
     while(1)
     {
-     //SBUSFRAMES();
+     SBUSFRAMES();
 
     // BIT by BIT
     // If a byte arrived from receiver
  /**/   
+ /*
     if(UARTCharsAvail(UART1_BASE))
     {
         //
@@ -725,7 +828,7 @@ int main(void)
         //
         UARTprintf("0x%02X \n", cData);
     }
-
+*/
     /*
     PCA9685_SetPWM(1,0, 205);
     DelayMs(1000);
