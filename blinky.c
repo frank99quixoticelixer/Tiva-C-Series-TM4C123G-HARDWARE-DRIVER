@@ -492,6 +492,11 @@ void ConfigureUART(void){
     UARTClockSourceSet( UART0_BASE, UART_CLOCK_PIOSC);
     UARTStdioConfig(0,115200,16000000);
 }
+// ARDUINO LOGIC...
+int32_t MapValue(int32_t x,int32_t in_min, int32_t in_max, int32_t out_min, int32_t out_max);
+void channel10(uint16_t value);
+void channel4(uint16_t value);
+void channel14(uint16_t value);
 //*****************************************************************************
 //
 // Function: ConfigureSBUSUART
@@ -560,8 +565,7 @@ void ConfigureSBUSUART(void){
         UART_CONFIG_PAR_EVEN
     );
 }
-void DecodeSBUS(void)
-{
+void DecodeSBUS(void){
     channels[0]  = ((sbusFrame[1]      | sbusFrame[2]  << 8) & 0x07FF);
     channels[1]  = ((sbusFrame[2] >> 3 | sbusFrame[3]  << 5) & 0x07FF);
     channels[2]  = ((sbusFrame[3] >> 6 | sbusFrame[4]  << 2 |
@@ -596,8 +600,7 @@ void DecodeSBUS(void)
 
     channels[15] = ((sbusFrame[21] >> 5 | sbusFrame[22] << 3) & 0x07FF);
 }
-void SBUSFRAMES(void)
-{
+void SBUSFRAMES(void){
     uint8_t cData;
     int i;
 
@@ -663,26 +666,17 @@ void SBUSFRAMES(void)
     //
     DecodeSBUS();
 
-
-    //
-    // PRINT CHANNELS
-    //
-    /*
-    UARTprintf("CH10: %4d  ", channels[9]);
-    UARTprintf("CH4: %4d  ", channels[4]);
-    UARTprintf("CH14: %4d  ", channels[13]);
-    */
     UARTprintf("CH08: %4d  ", channels[7]); //switch SE
     UARTprintf("CH09: %4d  ", channels[8]); //switch SE
     UARTprintf("CH014: %4d  ", channels[13]); // KNOB LD1
     UARTprintf("CH05: %4d  ", channels[4]);     // KNOB RD1
     // CONTROL FUNCTIONS
     //
-    /*
-    channel10(channels[9]);   // CH10
-    channel4(channels[3]);    // CH4
+    
+    channel10(channels[8]);   // CH10
+    channel4(channels[4]);    // CH4
     channel14(channels[13]);  // CH14
-    */
+    
                     //
                 }
                 else
@@ -698,9 +692,66 @@ void SBUSFRAMES(void)
         }
     }
 }
-void DelayMs(uint32_t ms)
-{
+void DelayMs(uint32_t ms){
     SysCtlDelay((g_ui32SysClock / 3 / 1000) * ms);
+}
+int main(void) 
+{
+    //CLOCK CONFIG
+    SysCtlClockSet(SYSCTL_OSC_MAIN | SYSCTL_USE_OSC | SYSCTL_XTAL_16MHZ);
+    g_ui32SysClock = SysCtlClockGet();
+    ConfigurePWM();
+    ConfigureUART();
+    ConfigureSBUSUART();
+    Configure_OUTPUT_PINS();
+    I2C0_Init();
+    PCA9685_Init();
+    PCA9685_SetPWMFreq(50);
+    UARTprintf("OUTPUT PINS... \n");
+    UARTprintf("IDK \n");
+    
+    //SetPWM(50,25);
+    while(1)
+    {
+     SBUSFRAMES();
+
+/*///////////////////////////////////////////////////////
+//  PASS        
+    //
+    // TEST 1
+    // Neutral position
+    //
+    UARTprintf("\nTEST: 992\n");
+    channel10(992);
+    channel4(992);
+    channel14(992);
+ 
+ // PASS
+    //
+    // TEST 2
+    // Right position
+    //
+    UARTprintf("\nTEST: 1712\n");
+
+    channel10(1712);
+    channel4(1712);
+    channel14(1712);
+ //   SysCtlDelay(g_ui32SysClock / 3);
+//PASS
+    //
+    // TEST 3
+    // Left position
+    //
+    UARTprintf("\nTEST: 272\n");
+
+    channel10(272);
+    channel4(272);
+    channel14(272);
+
+*/
+    MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3,GPIO_PIN_3 ); // HIGH LED
+ 
+    }
 }
 // ARDUINO LOGIC...
 int32_t MapValue(int32_t x,int32_t in_min, int32_t in_max, int32_t out_min, int32_t out_max){
@@ -789,161 +840,5 @@ void channel14(uint16_t value){
         SetPWM(50,dutyCycle);
         //UARTprintf("Angle: %d Duty: %d%% \n", angle,dutyCycle);
        
-    }
-}
-int main(void) 
-{
-    //CLOCK CONFIG
-    SysCtlClockSet(SYSCTL_OSC_MAIN | SYSCTL_USE_OSC | SYSCTL_XTAL_16MHZ);
-    g_ui32SysClock = SysCtlClockGet();
-    ConfigurePWM();
-    ConfigureUART();
-    ConfigureSBUSUART();
-    //I2C0_Init();
-    //PCA9685_Init();
-    //PCA9685_SetPWMFreq(50);
-    Configure_OUTPUT_PINS();
-    UARTprintf("OUTPUT PINS... \n");
-    UARTprintf("IDK \n");
-    uint8_t cData;
-    uint8_t i;
-    //SetPWM(50,25);
-    while(1)
-    {
-     SBUSFRAMES();
-
-    // BIT by BIT
-    // If a byte arrived from receiver
- /**/   
- /*
-    if(UARTCharsAvail(UART1_BASE))
-    {
-        //
-        // Read ONE byte
-        //
-        cData = UARTCharGet(UART1_BASE);
-
-        //
-        // Print in HEX
-        //
-        UARTprintf("0x%02X \n", cData);
-    }
-*/
-    /*
-    PCA9685_SetPWM(1,0, 205);
-    DelayMs(1000);
-         PCA9685_SetPWM(1,0, 310);
-    DelayMs(1000);
-              PCA9685_SetPWM(1,0, 410);
-    DelayMs(1000);
-         PCA9685_SetPWM(1,0, 310);
-    DelayMs(1000);
-    */
-
-/*///////////////////////////////////////////////////////
-//  PASS        
-    //
-    // TEST 1
-    // Neutral position
-    //
-    UARTprintf("\nTEST: 992\n");
-    channel10(992);
-    channel4(992);
-    channel14(992);
- 
- // PASS
-    //
-    // TEST 2
-    // Right position
-    //
-    UARTprintf("\nTEST: 1712\n");
-
-    channel10(1712);
-    channel4(1712);
-    channel14(1712);
- //   SysCtlDelay(g_ui32SysClock / 3);
-//PASS
-    //
-    // TEST 3
-    // Left position
-    //
-    UARTprintf("\nTEST: 272\n");
-
-    channel10(272);
-    channel4(272);
-    channel14(272);
-
-//    SysCtlDelay(g_ui32SysClock / 3);
-*///////////////////////////////////////////////////////
-//
-    // Check if UART1 received data
-    //
- // UARTCharPut(UART1_BASE, 0x55);
-/*
-
-for(i = 0; i < 25; i++)
-{
-    //
-    // Send ONE byte
-    //
-    UARTCharPut(UART1_BASE, sbusFrame[i]);
-
-    //
-    // Wait until received
-    //
-    while(!UARTCharsAvail(UART1_BASE));
-
-    //
-    // Read byte
-    //
-    cData = UARTCharGet(UART1_BASE);
-
-    //
-    // Print byte
-    //
-    UARTprintf("0x%02X ", cData);
-
-}
-
-UARTprintf("\n");
-SysCtlDelay(SysCtlClockGet()/3000); // ~1ms
-/*
-if(UARTCharsAvail(UART1_BASE))
-{
-    cData = UARTCharGet(UART1_BASE);
-    UARTprintf("0x%02X\n", cData);
-
-    SysCtlDelay(g_ui32SysClock / 30);
-}
-*/
-
-/*
-  if(UARTCharsAvail(UART1_BASE))
-    {
-        //
-        // Read byte from UART1
-        //
-
-        cData = UARTCharGet(UART1_BASE);
-
-        //
-        // Print HEX byte
-        //
-        UARTprintf("0x%02X ", cData);
-
-        //
-        // Detect SBUS frame header
-        //
-        if(cData == 0x0F)
-        {
-            UARTprintf("\nFRAME START\n");
-        }
-    }
-  */  
-    //channel4(992);
-   // channel14(992);
-    
-     MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3,GPIO_PIN_3 ); // HIGH LED
-    //PCA9685_SetPWM(1,0,2048);  
     }
 }
